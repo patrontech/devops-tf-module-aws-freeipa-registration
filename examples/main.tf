@@ -46,5 +46,6 @@ resource "aws_instance" "my_example" {
   ami = "some-ami-goes-here"
   instance_type = "t2.small"
   iam_instance_profile = aws_iam_instance_profile.my_example.name
-  user_data = base64encode(module.freeipa_module.bash_script_snippet)
+  # this hasn't been checked as of yet regarding the new line part.
+  user_data = base64encode(format("%s/%s","#!/bin/bash\n", module.freeipa_module.bash_script_snippet))
 }
