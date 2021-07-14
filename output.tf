@@ -1,11 +1,14 @@
-output "bash_script_snippet" {
-  value = data.template_file.freeipa_bash_script_snippet.rendered
+output "autoscale_handling_sns_topic_arn" {
+  description = "SNS topic ARN for autoscaling group"
+  value       = aws_sns_topic.autoscale_handling.arn
 }
 
-output "freeipa_secret_arn" {
-  value = var.freeipa_secret_arn == "" ? aws_secretsmanager_secret.freeipa_credentials[0].arn : data.aws_secretsmanager_secret.freeipa_credentials.arn
+output "autoscale_iam_role_arn" {
+  description = "IAM role ARN for autoscaling group"
+  value       = aws_iam_role.autoscale_handling.arn
 }
 
-output "freeipa_policy_arn" {
-  value = var.freeipa_create_iam_policy == true ? aws_iam_policy.get_freeipa_secret[0].arn : ""
+output "agent_lifecycle_iam_role_arn" {
+  description = "IAM Role ARN for lifecycle_hooks"
+  value       = aws_iam_role.lifecycle.arn
 }
