@@ -10,14 +10,19 @@ variable "freeipa_secret_arn" {
   description = "The ARN for the secret containing FreeIPA credentials"
 }
 
+variable "ec2_fqdn_tag" {
+  description = "The name of the EC2 tag that carries the instance's FQDN for freeIPA reg."
+  default     = "FQDN"
+}
+
 variable "vpc_subnet_ids" {
   description = "A list of subnet IDs to attach the lambda function to."
-  default = []
+  default     = []
 }
 
 variable "vpc_security_group_ids" {
   description = "A list of security group IDs to attach the lambda function to."
-  default = []
+  default     = []
 }
 
 variable "aws_tags" {
