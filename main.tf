@@ -100,7 +100,7 @@ data "aws_iam_policy_document" "lifecycle_policy" {
 
 data "archive_file" "autoscale" {
   type        = "zip"
-  source_file = "${path.module}/lambda/cleanup/"
+  source_dir = "${path.module}/lambda/cleanup"
   output_path = "${path.module}/lambda/cleanup/cleanup.zip"
 }
 
