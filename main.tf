@@ -110,7 +110,7 @@ resource "aws_lambda_function" "autoscale_handling" {
   filename         = data.archive_file.autoscale.output_path
   function_name    = "${var.prefix}-${var.name}"
   role             = aws_iam_role.autoscale_handling.arn
-  handler          = "autoscale.lambda_handler"
+  handler          = "cleanup.lambda_handler"
   runtime          = "python3.8"
   source_code_hash = filebase64sha256(data.archive_file.autoscale.output_path)
   description      = "Handles deregistering an instance from FreeIPA after its been terminated."
