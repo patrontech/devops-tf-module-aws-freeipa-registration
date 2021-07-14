@@ -1,6 +1,7 @@
 import json
 import logging
 import boto3
+import requests
 import sys
 import os
 
@@ -10,6 +11,7 @@ logger.setLevel(logging.INFO)
 autoscaling = boto3.client('autoscaling')
 ec2 = boto3.client('ec2')
 route53 = boto3.client('route53')
+secrets = boto3.client('secretsmanager')
 
 HOSTNAME_TAG_NAME = "asg:hostname_pattern"
 LIFECYCLE_KEY = "LifecycleHookName"
