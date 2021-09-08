@@ -12,6 +12,7 @@ IPA_ATTEMPTS=0
 # worse case it's unreachable and we break the loop to avoid us waiting forever, jq throws null if we have an issue.
 while [[ "$FQDN" = "null" && "$IPA_ATTEMPTS" < 6 ]]
 do
+   echo "Attempting to get FQDN from AWS API"
    FQDN="`aws ec2 describe-tags --filters \"Name=resource-id,Values=$INSTANCE_ID\" --region $REGION \"Name=key,Values=$TAG_NAME\" | jq -r .Tags[0].Value`"
    IPA_ATTEMPTS=$(( $IPA_ATTEMPTS + 1 ))
    sleep 10
