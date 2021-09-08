@@ -6,7 +6,17 @@ REGION="`curl --silent http://169.254.169.254/latest/dynamic/instance-identity/d
 INSTANCE_ID="`curl --silent http://instance-data/latest/meta-data/instance-id`"
 TAG_NAME="${ec2_fqdn_tag}"
 FREEIPA_SECRET_NAME=${freeipa_secret_name}
-FQDN="`aws ec2 describe-tags --filters \"Name=resource-id,Values=$INSTANCE_ID\" --region $REGION \"Name=key,Values=$TAG_NAME\" | jq -r .Tags[0].Value`"
+FQDN="null"
+IPA_ATTEMPTS=0
+# The following on occasion returns null because the lambda hasn't been quick enough, a simple sleep and retry here should be enough
+# worse case it's unreachable and we break the loop to avoid us waiting forever, jq throws null if we have an issue.
+while [[ "$FQDN" = "null" && "$IPA_ATTEMPTS" < 6 ]]
+do
+   FQDN="`aws ec2 describe-tags --filters \"Name=resource-id,Values=$INSTANCE_ID\" --region $REGION \"Name=key,Values=$TAG_NAME\" | jq -r .Tags[0].Value`"
+   IPA_ATTEMPTS=$(( $IPA_ATTEMPTS + 1 ))
+   sleep 10
+done
+
 FREEIPA_HOSTS="`aws secretsmanager get-secret-value --region \"$REGION\" --secret-id \"$FREEIPA_SECRET_NAME\" | jq -c '.SecretString | fromjson' | jq -r .Host`"
 FREEIPA_PRINCIPAL_USER="`aws secretsmanager get-secret-value --region \"$REGION\" --secret-id \"$FREEIPA_SECRET_NAME\" | jq -c '.SecretString | fromjson' | jq -r .User`"
 FREEIPA_PRINCIPAL_PASSWORD="`aws secretsmanager get-secret-value --region \"$REGION\" --secret-id \"$FREEIPA_SECRET_NAME\" | jq -c '.SecretString | fromjson' | jq -r .Password`"
