@@ -8,6 +8,11 @@ output "autoscale_iam_role_arn" {
   value       = aws_iam_role.autoscale_handling.arn
 }
 
+output "autoscale_iam_role_name" {
+  description = "IAM role Name for autoscaling group"
+  value       = aws_iam_role.autoscale_handling.name
+}
+
 output "agent_lifecycle_iam_role_arn" {
   description = "IAM Role ARN for lifecycle_hooks"
   value       = aws_iam_role.lifecycle.arn
