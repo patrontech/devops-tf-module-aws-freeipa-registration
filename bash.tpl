@@ -16,8 +16,15 @@ do
    echo "Attempting to get FQDN from AWS API"
    FQDN="`aws ec2 describe-tags --filters \"Name=resource-id,Values=$INSTANCE_ID\" --region $REGION \"Name=key,Values=$TAG_NAME\" | jq -r .Tags[0].Value`"
    IPA_ATTEMPTS=$(( $IPA_ATTEMPTS + 1 ))
-   sleep 10
+   if [[ "$FQDN" = "null" ]]
+   then
+     sleep 10
+   fi
 done
+#replace placeholder with real instanceid
+FQDN=$(echo "$FQDN" | sed "s/#instanceid/$INSTANCE_ID/")
+#get fqdn from full tag string
+FQDN=$(echo "$FQDN" | cut -d "@" -f 1)
 
 FREEIPA_HOSTS="`aws secretsmanager get-secret-value --region \"$REGION\" --secret-id \"$FREEIPA_SECRET_NAME\" | jq -c '.SecretString | fromjson' | jq -r .Host`"
 FREEIPA_PRINCIPAL_USER="`aws secretsmanager get-secret-value --region \"$REGION\" --secret-id \"$FREEIPA_SECRET_NAME\" | jq -c '.SecretString | fromjson' | jq -r .User`"
