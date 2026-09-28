@@ -27,3 +27,8 @@ override.tf.json
 
 # Include tfplan files to ignore the plan output of command: terraform plan -out=tfplan
 # example: *tfplan*
+
+# Python bytecode - archive_file zips the whole lambda dir, so these would
+# otherwise be shipped inside the deployment package.
+__pycache__/
+*.pyc

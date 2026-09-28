@@ -43,3 +43,68 @@ It would be better if we could pass through a route53 zone and then scan the ent
 
 This would decouple us from a particular tagging strategy and make this more flexible. However due to time constraints here we are.
 
+
+## Enrolment retry and orphan reconciliation (DEVOPS-7459)
+
+Concurrent ASG churn causes 389-ds transaction collisions on the FreeIPA servers,
+returned to callers as `DatabaseError`. Previously both halves of this module
+treated that as success: `ipa-client-install` ran once with no retry, and the
+cleanup lambda never looked at the JSON-RPC response at all. The result was
+instances booting with no Kerberos identity, and stale host entries accumulating
+on every failed deregistration.
+
+**Enrolment** (`bash.tpl`) now retries `ipa-client-install` with exponential
+backoff and jitter, clearing a partial install between attempts. The jitter is
+load-bearing: a scale-out launches several instances at once, and without it they
+retry in lockstep and recreate the collision.
+
+**Deregistration** (`cleanup.py`) parses the response, retries transient errors,
+and publishes a `HostDelFailed` CloudWatch metric when it finally gives up. It
+still completes the lifecycle hook either way - for `EC2_INSTANCE_TERMINATING`
+both CONTINUE and ABANDON terminate the instance, so refusing to complete would
+only strand ASG capacity. **Alarm on `HostDelFailed`.**
+
+**Reconciliation** (`reconcile.py`) runs on a schedule and deletes host entries
+whose EC2 instance no longer exists. It is opt-in (`reconcile_enabled = true`)
+and ships in dry run. Guards, in order:
+
+1. Only FQDNs equal to, or subdomains of, `reconcile_managed_suffixes` are
+   considered (DNS label boundary - `prod.awsclix.io` does not match
+   `notprod.awsclix.io`).
+2. Only FQDNs containing an EC2 instance id are considered.
+3. An instance counts as an orphan only if EC2 does not return it *at all*.
+   Terminated instances stay visible for about an hour, which gives a free grace
+   period and avoids racing the cleanup lambda. A stopped instance is left alone.
+4. Nothing is deleted unless `reconcile_apply = true`.
+5. More than `reconcile_max_deletes` orphans aborts the run without deleting.
+
+### Rollout
+
+Enable with `reconcile_apply = false`, read a dry-run invocation's logs, and only
+then set `reconcile_apply = true`.
+
+```terraform
+module "autoscale_freeipa_handler" {
+  source = "github.com/patrontech/devops-tf-module-aws-freeipa-registration?ref=vX.Y.Z"
+  # ... existing arguments ...
+
+  reconcile_enabled          = true
+  reconcile_managed_suffixes = ["prod.awsclix.io", "prod.conv.leapevent.net"]
+  reconcile_apply            = false  # flip to true after reviewing a dry run
+}
+```
+
+### Notes
+
+- `lambda_runtime` now defaults to `python3.12`. The previous hardcoded
+  `python3.8` is end-of-life and AWS no longer accepts new functions on it.
+- `cleanup_lambda_timeout` must stay comfortably below the lifecycle hook's
+  `heartbeat_timeout`, or instances hang waiting on a hook that never completes.
+  The retry loop also watches its own remaining execution budget so a slow batch
+  cannot strand later records.
+- `freeipa_ca_bundle` is empty by default, which preserves the existing
+  behaviour of **disabled TLS verification**. Point it at a bundled realm CA
+  cert to turn verification on.
+- `userdata.tf` now uses the built-in `templatefile()` instead of the deprecated
+  `hashicorp/template` provider, which has no `darwin_arm64` build and blocked
+  `terraform init` on Apple Silicon entirely.
