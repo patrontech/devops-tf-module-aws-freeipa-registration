@@ -34,15 +34,19 @@ STATUS_FILE=$(mktemp) || { log "FAILED: cannot create enrolment status file"; ex
 trap 'rm -f "$STATUS_FILE"' EXIT
 printf '%s\n' 'initialising (instance identity not yet available)' > "$STATUS_FILE"
 
-timeout --signal=KILL "$WORK_SECONDS" bash -s -- \
-  "$TAG_NAME" "$SECRET_ID" "$STATUS_FILE" "$WORK_SECONDS" <<'FREEIPA_ENROL_WORKER'
+# The worker is passed with bash -c, not fed on stdin: with "bash -s <<EOF" any
+# child that reads stdin (installer prompts, init scripts) would consume the
+# rest of the script. Its stdin is /dev/null so nothing can block on input.
+IFS= read -r -d '' FREEIPA_ENROL_WORKER_SCRIPT <<'FREEIPA_ENROL_WORKER'
 set +e +x +v
 TAG_NAME=$1
 SECRET_ID=$2
 STATUS_FILE=$3
 DEADLINE_SECONDS=$4
-FQDN_WAIT_SECONDS=120   # the DNS handler lambda sets the tag; cold starts under churn are slow
-MAX_ATTEMPTS=6
+FQDN_WAIT_SECONDS=90    # the DNS handler lambda sets the tag; cold starts under churn are slow
+# With prompt tag/secret, worst-case jitter and ~15 s installs, 4 attempts fit
+# the admission check below; a slow tag (full FQDN wait) leaves room for ~2.
+MAX_ATTEMPTS=4
 ATTEMPT_BUDGET=60       # retry admission estimate; the outer watchdog enforces the deadline
 START=$SECONDS
 INSTANCE_ID=""
@@ -100,7 +104,7 @@ unset SECRET
 [[ -n "$IPA_DOMAIN" && -n "$IPA_USER" && -n "$IPA_PASSWORD" ]] \
   || fail "secret $SECRET_ID unreadable or missing Domain/User/Password"
 
-# 3. Kerberos rejects clock skew over 5 minutes, and -N means IPA won't fix it.
+# 3. Kerberos rejects clock skew over 5 minutes, and --no-ntp means IPA won't fix it.
 if command -v chronyc >/dev/null 2>&1; then
   chronyc -a waitsync 12 1.0 >/dev/null 2>&1 \
     || log "warning: clock not confirmed in sync; Kerberos may reject the join"
@@ -124,6 +128,8 @@ fi
 #    without it they retry in lockstep and collide again.
 #    Servers are found via the realm's DNS SRV records, so replicas can be
 #    added or retired without touching this script or the secret.
+#    Known limitation: ipa-client-install only takes the enrolment password on
+#    argv, so it is briefly visible to local processes (ps) during the join.
 sleep $(( RANDOM % 20 ))
 attempt=1
 while :; do
@@ -171,6 +177,8 @@ if service --status-all 2>/dev/null | grep -Fq 'datadog-agent'; then
 fi
 exit 0
 FREEIPA_ENROL_WORKER
+timeout --signal=KILL "$WORK_SECONDS" bash -c "$FREEIPA_ENROL_WORKER_SCRIPT" freeipa-enrol-worker \
+  "$TAG_NAME" "$SECRET_ID" "$STATUS_FILE" "$WORK_SECONDS" </dev/null
 rc=$?
 if [[ $rc -ne 0 ]]; then
   detail=$(cat "$STATUS_FILE")
